@@ -4,12 +4,19 @@ declare(strict_types=1);
 
 namespace Liberu\CRM\Core\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Liberu\Foundation\Organizations\Models\Team;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 /** @property int $team_id */
 final class Tag extends Model
 {
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(Team::class);
+    }
+
     protected $table = 'crm_core_tags';
 
     protected $fillable = ['team_id', 'name', 'slug'];
