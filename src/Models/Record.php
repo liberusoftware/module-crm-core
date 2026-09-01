@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Liberu\CRM\Core\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Liberu\Foundation\Organizations\Models\Team;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -22,6 +24,11 @@ use Illuminate\Support\Carbon;
  */
 class Record extends Model
 {
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(Team::class);
+    }
+
     protected $table = 'crm_core_records';
 
     protected $fillable = ['record_type', 'team_id', 'owner_id', 'name', 'status', 'data', 'archived_at'];
