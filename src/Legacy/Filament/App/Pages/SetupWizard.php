@@ -6,6 +6,7 @@ namespace App\Filament\App\Pages;
 
 use App\Models\OAuthConfiguration;
 use App\Models\Team;
+use App\Models\User;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -54,6 +55,8 @@ class SetupWizard extends Page
         $mailchimp = OAuthConfiguration::getConfig('mailchimp');
         $this->data = [
             'team_name' => $team instanceof Team ? $team->name : '',
+            'account_name' => Filament::auth()->user()?->getAttribute('name'),
+            'account_email' => Filament::auth()->user()?->getAttribute('email'),
             'setup_social' => $facebook !== null || $google !== null || $linkedin !== null || $twitter !== null,
             'setup_voip' => $twilio !== null,
             'setup_whatsapp' => $whatsapp !== null,
@@ -63,8 +66,8 @@ class SetupWizard extends Page
             'google_client_id' => $google?->client_id,
             'linkedin_client_id' => $linkedin?->client_id,
             'twitter_client_id' => $twitter?->client_id,
-            'zernio_api_key' => $zernio?->client_secret,
-            'mailchimp_api_key' => $mailchimp?->client_secret,
+            'zernio_api_key' => null,
+            'mailchimp_api_key' => null,
             'mailchimp_server_prefix' => $mailchimp?->client_id,
             'email_provider' => $microsoft !== null && $google === null ? 'microsoft' : 'google',
             'email_client_id' => ($microsoft ?? $google)?->client_id,
@@ -76,6 +79,11 @@ class SetupWizard extends Page
             'imap_username' => $helpdesk?->client_id,
             'smtp_host' => $helpdesk?->additional_settings['smtp_host'] ?? null,
             'setup_team' => true,
+            'setup_facebook' => $facebook !== null,
+            'setup_google' => $google !== null,
+            'setup_linkedin' => $linkedin !== null,
+            'setup_twitter' => $twitter !== null,
+            'setup_marketing_apis' => $zernio !== null || $mailchimp !== null,
         ];
     }
 
@@ -95,25 +103,38 @@ class SetupWizard extends Page
                                 ->content('Secrets are encrypted before they are stored. OAuth consent and connected accounts are completed after this wizard.'),
                         ]),
                     Step::make('Team')
-                        ->description('Name your workspace')
+                        ->description('Set up your account and workspace')
                         ->schema([
-                            TextInput::make('team_name')->label('Team name')->required()->maxLength(255),
+                            Section::make('Your account')
+                                ->description('This information is used for your profile and team invitations.')
+                                ->schema([
+                                    TextInput::make('account_name')->label('Your name')->required()->maxLength(255),
+                                    TextInput::make('account_email')->label('Email address')->email()->required()->maxLength(255),
+                                ])->columns(2),
+                            Section::make('Workspace')->schema([
+                                TextInput::make('team_name')->label('Team name')->required()->maxLength(255),
+                            ]),
                         ]),
                     Step::make('Social media')
                         ->description('Connect publishing and advertising accounts')
                         ->schema([
                             Toggle::make('setup_social')->label('Configure social media'),
                             Section::make('OAuth applications')->schema([
-                                self::credential('facebook', 'Facebook app ID', 'Facebook app secret'),
-                                self::credential('google', 'Google client ID', 'Google client secret'),
-                                self::credential('linkedin', 'LinkedIn client ID', 'LinkedIn client secret'),
-                                self::credential('twitter', 'X/Twitter client ID', 'X/Twitter client secret'),
+                                Toggle::make('setup_facebook')->label('Facebook')->live(),
+                                self::credential('facebook', 'Facebook app ID', 'Facebook app secret')->visible(fn (callable $get): bool => (bool) $get('setup_facebook')),
+                                Toggle::make('setup_google')->label('Google')->live(),
+                                self::credential('google', 'Google client ID', 'Google client secret')->visible(fn (callable $get): bool => (bool) $get('setup_google')),
+                                Toggle::make('setup_linkedin')->label('LinkedIn')->live(),
+                                self::credential('linkedin', 'LinkedIn client ID', 'LinkedIn client secret')->visible(fn (callable $get): bool => (bool) $get('setup_linkedin')),
+                                Toggle::make('setup_twitter')->label('X/Twitter')->live(),
+                                self::credential('twitter', 'X/Twitter client ID', 'X/Twitter client secret')->visible(fn (callable $get): bool => (bool) $get('setup_twitter')),
                             ])->columns(2)->visible(fn (callable $get): bool => (bool) $get('setup_social')),
                             Section::make('Publishing and marketing APIs')->schema([
+                                Toggle::make('setup_marketing_apis')->label('Configure marketing APIs')->live(),
                                 TextInput::make('zernio_api_key')->label('Zernio API key')->password(),
                                 TextInput::make('mailchimp_api_key')->label('Mailchimp API key')->password(),
                                 TextInput::make('mailchimp_server_prefix')->label('Mailchimp server prefix')->placeholder('us21'),
-                            ])->columns(2)->visible(fn (callable $get): bool => (bool) $get('setup_social')),
+                            ])->columns(2)->visible(fn (callable $get): bool => (bool) $get('setup_marketing_apis')),
                         ]),
                     Step::make('Calling')
                         ->description('Enable VoIP and SMS')
@@ -161,10 +182,23 @@ class SetupWizard extends Page
                     $team->update(['name' => $data['team_name']]);
                 }
 
+                $user = Filament::auth()->user();
+                if ($user instanceof User) {
+                    $user->forceFill([
+                        'name' => $data['account_name'],
+                        'email' => $data['account_email'],
+                    ])->save();
+                }
+
                 if ($data['setup_social']) {
                     foreach (['facebook', 'google', 'linkedin', 'twitter'] as $provider) {
-                        $this->saveOAuth($provider, (string) ($data[$provider.'_client_id'] ?? ''), $data[$provider.'_client_secret'] ?? null);
+                        if ((bool) ($data['setup_'.$provider] ?? false)) {
+                            $this->saveOAuth($provider, (string) ($data[$provider.'_client_id'] ?? ''), $data[$provider.'_client_secret'] ?? null);
+                        }
                     }
+                }
+
+                if ($data['setup_marketing_apis']) {
                     if (filled($data['zernio_api_key'] ?? null)) {
                         $this->saveOAuth('zernio', 'api', $data['zernio_api_key']);
                     }
@@ -196,6 +230,10 @@ class SetupWizard extends Page
                         'smtp_host' => $data['smtp_host'],
                     ]);
                 }
+
+                if ($team instanceof Team) {
+                    $team->update(['setup_completed_at' => now()]);
+                }
             });
 
             $this->saved = true;
@@ -218,7 +256,7 @@ class SetupWizard extends Page
     {
         $rules = [];
         foreach (['facebook', 'google', 'linkedin', 'twitter'] as $provider) {
-            if ($data['setup_social']) {
+            if ($data['setup_social'] && ($data['setup_'.$provider] ?? false)) {
                 $rules[$provider.'_client_id'] = ['required', 'string'];
                 if (! $this->hasStoredConfiguration($provider)) {
                     $rules[$provider.'_client_secret'] = ['required', 'string'];
