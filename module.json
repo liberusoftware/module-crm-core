@@ -3,7 +3,7 @@
   "name": "crm-core",
   "display_name": "CRM Core",
   "description": "Customer records, organizations, relationships, ownership, notes, tags, attachments, favorites, lifecycle, and timeline.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "category": "capability",
   "provider": "Liberu\\CRM\\Core\\CRMCoreServiceProvider",
   "requires": {

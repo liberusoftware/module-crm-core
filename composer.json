@@ -18,7 +18,7 @@
       "name": "crm-core"
     }
   },
-  "version": "1.1.0",
+  "version": "1.2.0",
   "autoload-dev": {
     "psr-4": {
       "Liberu\\CRM\\Core\\Tests\\": "tests/"
